@@ -267,10 +267,10 @@ static alac_file* alac_init(int fmtp[32]) {
 
 	alac_file* alac = create_alac(sample_size, 2);
 
-	if (!alac) {
-		LOG_ERROR("cannot create alac codec", NULL);
-		return NULL;
-	}
+        if (!alac) {
+                LOG_ERROR("cannot create alac codec", NULL);
+                return NULL;
+        }
 
 	alac->setinfo_max_samples_per_frame = fmtp[1];
 	alac->setinfo_7a 				= fmtp[2];
@@ -641,11 +641,16 @@ static void buffer_put_packet(hairtunes_t *ctx, seq_t seqno, unsigned rtptime, b
 
 /*---------------------------------------------------------------------------*/
 static void *rtp_thread_func(void *arg) {
-	fd_set fds;
-	int i, sock = -1;
-	int count = 0;
-	bool ntp_sent;
-	hairtunes_t *ctx = (hairtunes_t*) arg;
+        fd_set fds;
+        int i, sock = -1;
+        int count = 0;
+        bool ntp_sent;
+        hairtunes_t *ctx = (hairtunes_t*) arg;
+        LOG_DEBUG("[%p]: rtp thread start data:%d/%hu control:%d/%hu timing:%d/%hu",
+                          ctx,
+                          ctx->rtp_sockets[DATA].sock, ctx->rtp_sockets[DATA].rport,
+                          ctx->rtp_sockets[CONTROL].sock, ctx->rtp_sockets[CONTROL].rport,
+                          ctx->rtp_sockets[TIMING].sock, ctx->rtp_sockets[TIMING].rport);
 
 	for (i = 0; i < 3; i++) {
 		if (ctx->rtp_sockets[i].sock > sock) sock = ctx->rtp_sockets[i].sock;
@@ -823,9 +828,9 @@ static void *rtp_thread_func(void *arg) {
 		}
 	}
 
-	LOG_INFO("[%p]: terminating", ctx);
-
-	return NULL;
+        LOG_INFO("[%p]: terminating", ctx);
+        LOG_DEBUG("[%p]: rtp thread end", ctx);
+        return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -855,11 +860,12 @@ static bool rtp_request_timing(hairtunes_t *ctx) {
 
 	host.sin_port = htons(ctx->rtp_sockets[TIMING].rport);
 
-	if (sizeof(req) != sendto(ctx->rtp_sockets[TIMING].sock, req, sizeof(req), 0, (struct sockaddr*) &host, sizeof(host))) {
-		LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
-	}
+        if (sizeof(req) != sendto(ctx->rtp_sockets[TIMING].sock, req, sizeof(req), 0, (struct sockaddr*) &host, sizeof(host))) {
+                LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
+        }
 
-	return true;
+LOG_DEBUG("[%p]: timing request sent", ctx);
+return true;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -881,26 +887,31 @@ static bool rtp_request_resend(hairtunes_t *ctx, seq_t first, seq_t last) {
 
 	ctx->rtp_host.sin_port = htons(ctx->rtp_sockets[CONTROL].rport);
 
-	if (sizeof(req) != sendto(ctx->rtp_sockets[CONTROL].sock, req, sizeof(req), 0, (struct sockaddr*) &ctx->rtp_host, sizeof(ctx->rtp_host))) {
-		LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
-	}
+        if (sizeof(req) != sendto(ctx->rtp_sockets[CONTROL].sock, req, sizeof(req), 0, (struct sockaddr*) &ctx->rtp_host, sizeof(ctx->rtp_host))) {
+                LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
+        }
 
-	return true;
+        return true;
 }
 
 /*---------------------------------------------------------------------------*/
 // get the next frame, when available. return 0 if underrun/stream reset.
 static short *_buffer_get_frame(hairtunes_t *ctx, int *len) {
-	short buf_fill;
+        LOG_SDEBUG("[%p]: _buffer_get_frame start W:%hu R:%hu", ctx, ctx->ab_write, ctx->ab_read);
+        short buf_fill;
 	abuf_t *curframe = 0;
 	int i;
 	uint32_t now, playtime;
 
-	if (!ctx->playing) return NULL;
+        if (!ctx->playing) {
+                LOG_SDEBUG("[%p]: _buffer_get_frame not playing", ctx);
+                return NULL;
+        }
 
 	// send silence if required to create enough buffering (want countdown to happen)
 	if ((ctx->silence_count && ctx->silence_count--) || ctx->pause)	{
 		*len = ctx->frame_size * 4;
+		LOG_SDEBUG("[%p]: _buffer_get_frame return silence", ctx);
 		return (short*) ctx->silence_frame;
 	}
 
@@ -929,7 +940,7 @@ static short *_buffer_get_frame(hairtunes_t *ctx, int *len) {
 	// watch out for 32 bits overflow
 	playtime = ctx->synchro.time + (((int32_t)(curframe->rtptime - ctx->synchro.rtp)) * 1000) / 44100;
 
-	LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
+		LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
 
 	// wait if not ready but have time, otherwise send silence
 	if ((!buf_fill && !ctx->http_fill) || ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (now < playtime && !curframe->ready)) {
@@ -942,6 +953,7 @@ static short *_buffer_get_frame(hairtunes_t *ctx, int *len) {
 				frame->last_resend = now;
 			}
 		}
+		LOG_SDEBUG("[%p]: _buffer_get_frame wait", ctx);
 		return NULL;
 	}
 
@@ -979,11 +991,12 @@ static short *_buffer_get_frame(hairtunes_t *ctx, int *len) {
 		LOG_SDEBUG("[%p]: prepared frame (fill:%hd, W:%hu R:%hu)", ctx, buf_fill-1, ctx->ab_write, ctx->ab_read);
 	}
 
-	*len = curframe->len;
-	curframe->ready = 0;
-	ctx->ab_read++;
+        *len = curframe->len;
+        curframe->ready = 0;
+        ctx->ab_read++;
 
-	return curframe->data;
+        LOG_SDEBUG("[%p]: _buffer_get_frame end len:%d W:%hu R:%hu", ctx, *len, ctx->ab_write, ctx->ab_read);
+        return curframe->data;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1013,12 +1026,13 @@ int send_data(bool chunked, int sock, void *data, int len, int flags) {
 
 /*---------------------------------------------------------------------------*/
 static void *http_thread_func(void *arg) {
-	int16_t *inbuf;
-	int frame_count = 0;
-	FLAC__int32 *flac_samples = NULL;
-	hairtunes_t *ctx = (hairtunes_t*) arg;
-	int sock = -1;
-	struct timeval timeout = { 0, 0 };
+        int16_t *inbuf;
+        int frame_count = 0;
+        FLAC__int32 *flac_samples = NULL;
+        hairtunes_t *ctx = (hairtunes_t*) arg;
+        int sock = -1;
+        struct timeval timeout = { 0, 0 };
+        LOG_DEBUG("[%p]: http thread start listener:%d", ctx, ctx->http_listener);
 
 	if (ctx->encode.config.codec == CODEC_FLAC && ((flac_samples = malloc(2 * ctx->frame_size * sizeof(FLAC__int32))) == NULL)) {
 		LOG_ERROR("[%p]: Cannot allocate FLAC sample buffer %u", ctx, ctx->frame_size);
@@ -1212,21 +1226,25 @@ static void *http_thread_func(void *arg) {
 
 	if (ctx->encode.config.codec == CODEC_FLAC && flac_samples) free(flac_samples);
 
-	LOG_INFO("[%p]: terminating", ctx);
-
-	return NULL;
+        LOG_INFO("[%p]: terminating", ctx);
+        LOG_DEBUG("[%p]: http thread end", ctx);
+        return NULL;
 }
 
 /*----------------------------------------------------------------------------*/
 static bool handle_http(hairtunes_t *ctx, int sock)
 {
-	char *body = NULL, method[16] = "", proto[16] = "", *str, *head = NULL;
-	key_data_t headers[64], resp[16] = { { NULL, NULL } };
-	size_t offset = 0;
-	int len;
-	bool HTTP_11;
+        char *body = NULL, method[16] = "", proto[16] = "", *str, *head = NULL;
+        key_data_t headers[64], resp[16] = { { NULL, NULL } };
+        size_t offset = 0;
+        int len;
+        bool HTTP_11;
+        LOG_DEBUG("[%p]: handle_http enter sock:%d", ctx, sock);
 
-	if (!http_parse(sock, method, NULL, proto, headers, &body, &len)) return false;
+        if (!http_parse(sock, method, NULL, proto, headers, &body, &len)) {
+                LOG_DEBUG("[%p]: handle_http exit parse error", ctx);
+                return false;
+        }
 	HTTP_11 = strstr(proto, "1.1") != NULL;
 
 	if (*loglevel >= lINFO) {
@@ -1283,8 +1301,11 @@ static bool handle_http(hairtunes_t *ctx, int sock)
 	kd_free(resp);
 	kd_free(headers);
 
-	// nothing else to do if this is a HEAD request
-	if (strstr(method, "HEAD")) return false;
+        // nothing else to do if this is a HEAD request
+        if (strstr(method, "HEAD")) {
+                LOG_DEBUG("[%p]: handle_http exit HEAD", ctx);
+                return false;
+        }
 
 	// need to re-send the range
 	if (offset) {
@@ -1317,6 +1338,7 @@ static bool handle_http(hairtunes_t *ctx, int sock)
 		}
 	}
 
+	LOG_DEBUG("[%p]: handle_http exit success", ctx);
 	return true;
 }
 
