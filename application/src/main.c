@@ -178,12 +178,13 @@ static void sighandler(int signum) {
 
 /*----------------------------------------------------------------------------*/
 int main(int argc, char **argv) {
-	char aeskey[16] = "", aesiv[16] = "", *fmtp = NULL;
-	char *arg, *logfile = NULL, *latencies = "";
-	int ret = 0;
-	bool use_sync = false, drift = false;
-	static struct in_addr peer;
-	char* codec = "";
+        char aeskey[16] = "", aesiv[16] = "", *fmtp = NULL;
+        char *arg, *logfile = NULL, *latencies = "";
+        int ret = 0;
+        bool use_sync = false, drift = false;
+        static struct in_addr peer;
+        char* codec = "";
+        LOG_DEBUG("main start argc:%d", argc);
 	bool metadata = false;
 
 	// just print usage and exit
@@ -377,9 +378,10 @@ int main(int argc, char **argv) {
 		if (ipc_sock != -1) shutdown_socket(ipc_sock);
 	}
 
-	netsock_close();
+        netsock_close();
 
-	return ret;
+        LOG_DEBUG("main end ret:%d", ret);
+        return ret;
 }
 
 
