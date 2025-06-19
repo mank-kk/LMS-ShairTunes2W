@@ -887,11 +887,12 @@ static bool rtp_request_resend(hairtunes_t *ctx, seq_t first, seq_t last) {
 
 	ctx->rtp_host.sin_port = htons(ctx->rtp_sockets[CONTROL].rport);
 
-        if (sizeof(req) != sendto(ctx->rtp_sockets[CONTROL].sock, req, sizeof(req), 0, (struct sockaddr*) &ctx->rtp_host, sizeof(ctx->rtp_host))) {
-                LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
-        }
+       if (sizeof(req) != sendto(ctx->rtp_sockets[CONTROL].sock, req, sizeof(req), 0, (struct sockaddr*) &ctx->rtp_host, sizeof(ctx->rtp_host))) {
+               LOG_WARN("[%p]: SENDTO failed (%s)", ctx, strerror(errno));
+       }
 
-        return true;
+       LOG_DEBUG("[%p]: resend request sent", ctx);
+       return true;
 }
 
 /*---------------------------------------------------------------------------*/
